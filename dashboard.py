@@ -17,7 +17,22 @@ df = load_data()
 
 # Sidebar
 st.sidebar.title("Filter")
-st.sidebar.info("Filter Benua akan mempengaruhi: Metrics, Top 10 Negara, Tren Populasi, dan Growth Rate vs Kepadatan")
+st.sidebar.info("Filter Benua dan Tahun akan mempengaruhi: Metrics, Top 10 Negara, Peta Populasi, dan Growth Rate vs Kepadatan")
+
+# Filter Tahun
+year_options = {
+    "1970": "1970 Population",
+    "1980": "1980 Population",
+    "1990": "1990 Population",
+    "2000": "2000 Population",
+    "2010": "2010 Population",
+    "2015": "2015 Population",
+    "2020": "2020 Population",
+    "2022": "2022 Population"
+}
+
+selected_year = st.sidebar.selectbox("Tahun", list(year_options.keys()), index=7)
+year_column = year_options[selected_year]
 
 continents = ["Semua"] + sorted(df["Continent"].unique().tolist())
 selected_continent = st.sidebar.selectbox("Benua", continents)
@@ -31,34 +46,35 @@ st.title("World Population Dashboard")
 
 col1, col2, col3, col4 = st.columns(4)
 
-total_pop_2022 = filtered_df["2022 Population"].sum()
+total_pop = filtered_df[year_column].sum()
 total_countries = len(filtered_df)
 avg_growth_rate = filtered_df["Growth Rate"].mean()
 avg_density = filtered_df["Density (per km²)"].mean()
 
-col1.metric("Total Populasi 2022", f"{total_pop_2022/1e9:.2f} Miliar")
+col1.metric(f"Total Populasi {selected_year}", f"{total_pop/1e9:.2f} Miliar")
 col2.metric("Jumlah Negara", f"{total_countries}")
 col3.metric("Rata-rata Growth Rate", f"{avg_growth_rate:.4f}")
-col4.metric("Rata-rata Kepadatan 2022", f"{avg_density:.2f}/km²")
+col4.metric(f"Rata-rata Kepadatan {selected_year}", f"{avg_density:.2f}/km²")
 
 col_left, col_right = st.columns(2)
 
 with col_left:
-    st.subheader("Top 10 Negara dengan Populasi Terbesar (2022)")
-    top_countries = filtered_df.nlargest(10, "2022 Population")[["Rank", "Country/Territory", "2022 Population", "Continent", "Density (per km²)"]]
-    top_countries["2022 Population"] = top_countries["2022 Population"].apply(lambda x: f"{x:,.0f}")
+    st.subheader(f"Top 10 Negara dengan Populasi Terbesar ({selected_year})")
+    top_countries = filtered_df.nlargest(10, year_column)[["Rank", "Country/Territory", year_column, "Continent", "Density (per km²)"]].copy()
+    top_countries = top_countries.rename(columns={year_column: f"Populasi {selected_year}"})
+    top_countries[f"Populasi {selected_year}"] = top_countries[f"Populasi {selected_year}"].apply(lambda x: f"{x:,.0f}")
     top_countries["Density (per km²)"] = top_countries["Density (per km²)"].apply(lambda x: f"{x:.2f}")
     top_countries = top_countries.reset_index(drop=True)
     top_countries.index = top_countries.index + 1
     st.dataframe(top_countries, use_container_width=True, height=400)
 
 with col_right:
-    st.subheader("Distribusi Populasi Dunia per Benua (2022)")
-    continent_pop = df.groupby("Continent")["2022 Population"].sum().reset_index()
+    st.subheader(f"Distribusi Populasi Dunia per Benua ({selected_year})")
+    continent_pop = df.groupby("Continent")[year_column].sum().reset_index()
     
     fig_pie = px.pie(
         continent_pop,
-        values="2022 Population",
+        values=year_column,
         names="Continent",
         hole=0.4
     )
@@ -104,21 +120,21 @@ if selected_countries:
     fig_line.update_layout(height=400)
     st.plotly_chart(fig_line, use_container_width=True)
 
-st.subheader("Peta Distribusi Populasi Dunia (2022)")
+st.subheader(f"Peta Distribusi Populasi Dunia ({selected_year})")
 
 fig_map = px.choropleth(
-    df,
+    filtered_df,
     locations="CCA3",
-    color="2022 Population",
+    color=year_column,
     hover_name="Country/Territory",
-    hover_data={"2022 Population": ":,.0f", "CCA3": False},
+    hover_data={year_column: ":,.0f", "CCA3": False},
     color_continuous_scale="Blues",
-    labels={"2022 Population": "Populasi 2022"}
+    labels={year_column: f"Populasi {selected_year}"}
 )
 fig_map.update_layout(height=600, geo=dict(showframe=False, projection_type="natural earth"))
 st.plotly_chart(fig_map, use_container_width=True)
 
-st.subheader("Hubungan Growth Rate dan Kepadatan Populasi per Negara (2022)")
+st.subheader(f"Hubungan Growth Rate dan Kepadatan Populasi per Negara ({selected_year})")
 
 # Filter outliers untuk visualisasi yang lebih baik
 scatter_df = filtered_df[filtered_df["Density (per km²)"] < 2000].copy()
@@ -127,10 +143,10 @@ fig_scatter = px.scatter(
     scatter_df,
     x="Density (per km²)",
     y="Growth Rate",
-    size="2022 Population",
+    size=year_column,
     color="Continent",
     hover_name="Country/Territory",
-    hover_data={"2022 Population": ":,.0f", "Density (per km²)": ":.2f", "Growth Rate": ":.4f"},
+    hover_data={year_column: ":,.0f", "Density (per km²)": ":.2f", "Growth Rate": ":.4f"},
     size_max=50,
     labels={"Density (per km²)": "Kepadatan (per km²)", "Growth Rate": "Tingkat Pertumbuhan"}
 )
