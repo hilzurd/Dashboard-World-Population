@@ -17,11 +17,10 @@ df = load_data()
 
 # Sidebar
 st.sidebar.title("Filter")
+st.sidebar.info("Filter Benua akan mempengaruhi: Metrics, Top 10 Negara, Tren Populasi, dan Growth Rate vs Kepadatan")
 
 continents = ["Semua"] + sorted(df["Continent"].unique().tolist())
 selected_continent = st.sidebar.selectbox("Benua", continents)
-
-top_n = st.sidebar.slider("Top N Negara", min_value=5, max_value=50, value=10)
 
 if selected_continent == "Semua":
     filtered_df = df.copy()
@@ -39,28 +38,22 @@ avg_density = filtered_df["Density (per km²)"].mean()
 
 col1.metric("Total Populasi 2022", f"{total_pop_2022/1e9:.2f} Miliar")
 col2.metric("Jumlah Negara", f"{total_countries}")
-col3.metric("Growth Rate", f"{avg_growth_rate:.4f}")
-col4.metric("Kepadatan", f"{avg_density:.2f}/km²")
+col3.metric("Rata-rata Growth Rate", f"{avg_growth_rate:.4f}")
+col4.metric("Rata-rata Kepadatan 2022", f"{avg_density:.2f}/km²")
 
 col_left, col_right = st.columns(2)
 
 with col_left:
-    st.subheader(f"Top {top_n} Negara Populasi Terbesar")
-    top_countries = filtered_df.nlargest(top_n, "2022 Population")[["Country/Territory", "2022 Population", "Continent"]]
-    
-    fig_bar = px.bar(
-        top_countries,
-        x="2022 Population",
-        y="Country/Territory",
-        orientation="h",
-        color="Country/Territory",
-        labels={"2022 Population": "Populasi", "Country/Territory": "Negara"}
-    )
-    fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, height=400, showlegend=False)
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.subheader("Top 10 Negara dengan Populasi Terbesar (2022)")
+    top_countries = filtered_df.nlargest(10, "2022 Population")[["Rank", "Country/Territory", "2022 Population", "Continent", "Density (per km²)"]]
+    top_countries["2022 Population"] = top_countries["2022 Population"].apply(lambda x: f"{x:,.0f}")
+    top_countries["Density (per km²)"] = top_countries["Density (per km²)"].apply(lambda x: f"{x:.2f}")
+    top_countries = top_countries.reset_index(drop=True)
+    top_countries.index = top_countries.index + 1
+    st.dataframe(top_countries, use_container_width=True, height=400)
 
 with col_right:
-    st.subheader("Distribusi per Benua")
+    st.subheader("Distribusi Populasi Dunia per Benua (2022)")
     continent_pop = df.groupby("Continent")["2022 Population"].sum().reset_index()
     
     fig_pie = px.pie(
@@ -73,11 +66,11 @@ with col_right:
     fig_pie.update_layout(height=400)
     st.plotly_chart(fig_pie, use_container_width=True)
 
-st.subheader("Tren Populasi")
+st.subheader("Tren Populasi dari Tahun 1970-2022")
 
 available_countries = filtered_df["Country/Territory"].tolist()
 selected_countries = st.multiselect(
-    "Pilih Negara",
+    "Pilih Negara untuk Membandingkan Tren Populasi",
     available_countries,
     default=available_countries[:3] if len(available_countries) >= 3 else available_countries
 )
@@ -111,42 +104,38 @@ if selected_countries:
     fig_line.update_layout(height=400)
     st.plotly_chart(fig_line, use_container_width=True)
 
-col_scatter, col_map = st.columns(2)
+st.subheader("Peta Distribusi Populasi Dunia (2022)")
 
-with col_scatter:
-    st.subheader("Growth Rate vs Kepadatan")
-    
-    fig_scatter = px.scatter(
-        filtered_df,
-        x="Density (per km²)",
-        y="Growth Rate",
-        size="2022 Population",
-        color="Country/Territory",
-        hover_name="Country/Territory",
-        size_max=50
-    )
-    fig_scatter.update_layout(height=400, showlegend=False)
-    st.plotly_chart(fig_scatter, use_container_width=True)
+fig_map = px.choropleth(
+    df,
+    locations="CCA3",
+    color="2022 Population",
+    hover_name="Country/Territory",
+    hover_data={"2022 Population": ":,.0f", "CCA3": False},
+    color_continuous_scale="Blues",
+    labels={"2022 Population": "Populasi 2022"}
+)
+fig_map.update_layout(height=600, geo=dict(showframe=False, projection_type="natural earth"))
+st.plotly_chart(fig_map, use_container_width=True)
 
-with col_map:
-    st.subheader("Peta Populasi 2022")
-    
-    fig_map = px.choropleth(
-        df,
-        locations="CCA3",
-        color="2022 Population",
-        hover_name="Country/Territory",
-        color_continuous_scale="Blues"
-    )
-    fig_map.update_layout(height=400, geo=dict(showframe=False))
-    st.plotly_chart(fig_map, use_container_width=True)
+st.subheader("Hubungan Growth Rate dan Kepadatan Populasi per Negara (2022)")
 
-st.subheader("Data")
+# Filter outliers untuk visualisasi yang lebih baik
+scatter_df = filtered_df[filtered_df["Density (per km²)"] < 2000].copy()
 
-display_cols = ["Rank", "Country/Territory", "Capital", "Continent", 
-                "2022 Population", "Growth Rate", "Density (per km²)"]
-
-st.dataframe(filtered_df[display_cols].sort_values("Rank"), use_container_width=True, height=300)
+fig_scatter = px.scatter(
+    scatter_df,
+    x="Density (per km²)",
+    y="Growth Rate",
+    size="2022 Population",
+    color="Continent",
+    hover_name="Country/Territory",
+    hover_data={"2022 Population": ":,.0f", "Density (per km²)": ":.2f", "Growth Rate": ":.4f"},
+    size_max=50,
+    labels={"Density (per km²)": "Kepadatan (per km²)", "Growth Rate": "Tingkat Pertumbuhan"}
+)
+fig_scatter.update_layout(height=500)
+st.plotly_chart(fig_scatter, use_container_width=True)
 
 csv = filtered_df.to_csv(index=False).encode('utf-8')
-st.sidebar.download_button("Download CSV", csv, "data.csv", "text/csv")
+st.sidebar.download_button("Download Data (CSV)", csv, "world_population_data.csv", "text/csv")
